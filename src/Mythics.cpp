@@ -1,104 +1,118 @@
-#include <eosio.token/eosio.token.hpp>
+#include "mythics.hpp"
 
 namespace eosio {
 
-void token::create( const name&   issuer,
-                    const asset&  maximum_supply )
-{
-    require_auth( get_self() );
+void token::create() {
+     require_auth(get_self());
 
-    auto sym = maximum_supply.symbol;
-    check( sym.is_valid(), "invalid symbol name" );
-    check( maximum_supply.is_valid(), "invalid supply");
-    check( maximum_supply.amount > 0, "max-supply must be positive");
+     auto sym = symbol("MYTHICS", 4); // MYTHICS is the token symbol with precision 4
+     auto maximum_supply = asset(1000000000000, sym); /////////////////////////////////////////add decimal zeros
 
-    stats statstable( get_self(), sym.code().raw() );
-    auto existing = statstable.find( sym.code().raw() );
-    check( existing == statstable.end(), "token with symbol already exists" );
+     stats statstable(get_self(), sym.code().raw());
+     auto existing = statstable.find(sym.code().raw());
+     check(existing == statstable.end(), "token with symbol already created");
 
-    statstable.emplace( get_self(), [&]( auto& s ) {
-       s.supply.symbol = maximum_supply.symbol;
-       s.max_supply    = maximum_supply;
-       s.issuer        = issuer;
-    });
-}
+     statstable.emplace(get_self(), [&](auto &s) {
+        s.supply.symbol = sym;
+        s.max_supply = maximum_supply;
+        s.issuer = get_self();
+     });
+  }
 
 
-void token::issue( const name& to, const asset& quantity, const string& memo )
-{
-    auto sym = quantity.symbol;
-    check( sym.is_valid(), "invalid symbol name" );
-    check( memo.size() <= 256, "memo has more than 256 bytes" );
+ void token::issue(const asset &quantity, const string &memo) {
+     require_auth(get_self());
 
-    stats statstable( get_self(), sym.code().raw() );
-    auto existing = statstable.find( sym.code().raw() );
-    check( existing != statstable.end(), "token with symbol does not exist, create token before issue" );
-    const auto& st = *existing;
-    check( to == st.issuer, "tokens can only be issued to issuer account" );
+     auto sym = quantity.symbol;
+     auto mythicssym_code = symbol("MYTHICS", 4); // MYTHICS is the token symbol with precision 4
+     check(sym.code() == mythicssym_code.code(), "This contract can handle MYTHICS tokens only.");
+     check(sym.is_valid(), "invalid symbol name");
+     check(memo.size() <= 256, "memo has more than 256 bytes");
 
-    require_auth( st.issuer );
-    check( quantity.is_valid(), "invalid quantity" );
-    check( quantity.amount > 0, "must issue positive quantity" );
+     stats statstable(get_self(), sym.code().raw());
+     auto existing = statstable.find(sym.code().raw());
+     check(existing != statstable.end(), "token with symbol does not exist, create token before issue");
 
-    check( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
-    check( quantity.amount <= st.max_supply.amount - st.supply.amount, "quantity exceeds available supply");
+     const auto& existing_token = *existing;
+     require_auth( existing_token.issuer );
 
-    statstable.modify( st, same_payer, [&]( auto& s ) {
-       s.supply += quantity;
-    });
+     check(quantity.is_valid(), "invalid quantity");
+     check(quantity.amount > 0, "must issue positive quantity");
+     check(quantity.symbol == existing_token.supply.symbol, "symbol precision mismatch");
+     check(quantity.amount <= existing_token.max_supply.amount - existing_token.supply.amount,
+                                "quantity exceeds available supply");
 
-    add_balance( st.issuer, quantity, st.issuer );
-}
+     statstable.modify(existing_token, same_payer, [&](auto &s) {
+        s.supply += quantity;
+     });
 
-void token::retire( const asset& quantity, const string& memo )
-{
-    auto sym = quantity.symbol;
-    check( sym.is_valid(), "invalid symbol name" );
-    check( memo.size() <= 256, "memo has more than 256 bytes" );
+     add_balance(existing_token.issuer, quantity, existing_token.issuer);
+  }
 
-    stats statstable( get_self(), sym.code().raw() );
-    auto existing = statstable.find( sym.code().raw() );
-    check( existing != statstable.end(), "token with symbol does not exist" );
-    const auto& st = *existing;
+  void token::retire(const asset &quantity, const string &memo) {
+     auto sym = quantity.symbol;
+     check(sym.is_valid(), "invalid symbol name");
+     check(memo.size() <= 256, "memo has more than 256 bytes");
+     auto mythicssym_code = symbol("MYTHICS", 4); // MYTHICS is the token symbol with precision 4
+     check(sym.code() == mythicssym_code.code(), "This contract can handle MYTHICS tokens only.");
 
-    require_auth( st.issuer );
-    check( quantity.is_valid(), "invalid quantity" );
-    check( quantity.amount > 0, "must retire positive quantity" );
+     stats statstable(get_self(), sym.code().raw());
+     auto existing = statstable.find(sym.code().raw());
+     check(existing != statstable.end(), "token with symbol does not exist");
+     const auto &st = *existing;
 
-    check( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
+     require_auth(st.issuer);
+     check(quantity.is_valid(), "invalid quantity");
+     check(quantity.amount > 0, "must retire positive quantity");
 
-    statstable.modify( st, same_payer, [&]( auto& s ) {
-       s.supply -= quantity;
-    });
+     check(quantity.symbol == st.supply.symbol, "symbol precision mismatch");
 
-    sub_balance( st.issuer, quantity );
-}
+     statstable.modify(st, same_payer, [&](auto &s) {
+        s.supply -= quantity;
+     });
 
-void token::transfer( const name&    from,
-                      const name&    to,
-                      const asset&   quantity,
-                      const string&  memo )
-{
-    check( from != to, "cannot transfer to self" );
-    require_auth( from );
-    check( is_account( to ), "to account does not exist");
-    auto sym = quantity.symbol.code();
-    stats statstable( get_self(), sym.raw() );
-    const auto& st = statstable.get( sym.raw(), "no balance with specified symbol" );
+     sub_balance(st.issuer, quantity);
+  }
 
-    require_recipient( from );
-    require_recipient( to );
+  void token::transfer(const name &from,
+                       const name &to,
+                       const asset &quantity,
+                       const string &memo) {
+     check(from != to, "cannot transfer to self");
+     require_auth(from);
+     check(is_account(to), "to account does not exist");
+     auto sym = quantity.symbol.code();
 
-    check( quantity.is_valid(), "invalid quantity" );
-    check( quantity.amount > 0, "must transfer positive quantity" );
-    check( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
-    check( memo.size() <= 256, "memo has more than 256 bytes" );
+     auto mythicssym_code = symbol("MYTHICS", 4); // MYTHICS is the token symbol with precision 4
+     check(sym.code() == mythicssym_code.code(), "This contract can handle MYTHICS tokens only.");
+     stats statstable(get_self(), sym.raw());
+     const auto &st = statstable.get(sym.raw());
 
-    auto payer = has_auth( to ) ? to : from;
+     require_recipient(from);
+     require_recipient(to);
 
-    sub_balance( from, quantity );
-    add_balance( to, quantity, payer );
-}
+     check(quantity.is_valid(), "invalid quantity");
+     check(quantity.amount > 0, "must transfer positive quantity");
+     check(quantity.symbol == st.supply.symbol, "symbol precision mismatch");
+     check(memo.size() <= 256, "memo has more than 256 bytes");
+
+     auto payer = has_auth(to) ? to : from;
+
+    if(tax_enabled)
+    {
+        //If tax is enabled calcualte tax amount and subtract from transfer amount
+        asset tax((quantity*tax_rate)/100, mythicssym_code);    // allow set amount of tokens to be recieved
+        asset send_quantity((quantity-tax), mythicssym_code);    // allow set amount of tokens to be recieved
+    }
+    else
+    {
+        asset send_quantity = quantity;    // allow set amount of tokens to be recieved
+    }
+
+     sub_balance(from, quantity);
+     add_balance(to, send_quantity, payer);
+     add_balance(_self, tax, payer);
+  }
 
 void token::sub_balance( const name& owner, const asset& value ) {
    accounts from_acnts( get_self(), owner.value );
@@ -125,6 +139,69 @@ void token::add_balance( const name& owner, const asset& value, const name& ram_
       });
    }
 }
+
+void token::enable_faucet(const bool state)
+{
+     require_auth(get_self());
+     faucet_enabled = state;
+}
+void token::faucet_time(const uint32_t hours)
+{
+     require_auth(get_self());
+     faucet_time = hours*60*60;
+}
+void token::faucet_amount(const uint32_t amount)
+{
+     require_auth(get_self());
+     faucet_amount = amount*10000;
+}
+
+void token::enable_tax(const bool state)
+{
+     require_auth(get_self());
+     tax_enabled = state;
+}
+void token::tax_rate(const uint32_t rate)
+{
+     require_auth(get_self());
+     tax_rate = amount;
+}
+
+void token::faucet(const name &owner)
+{
+     check(_self != owner, "Cannot use faucet from MYTHICS owner account.");
+
+     // Check if the user has used the faucet before
+     faucets faucets_table(get_self(), sym.raw());
+     auto it = faucets_table.find(owner.value);
+     if(it == faucets_table.end()){
+        // Register the user so it will be tracked for next use
+        faucets_table.emplace(owner, [&](auto &row) {
+            row.account = owner;
+            row.last_recieved = now();
+        });
+     }
+     else{
+        // Check that the required time has passed since last time faucet was used.
+        check(now() > it.last_recieved + faucet_time, "You need to wait longer before using the faucet again.");
+     }
+    
+     require_auth(owner);
+     require_recipient(_self); // from
+     require_recipient(owner); // to
+
+     auto sym = symbol("MYTHICS", 4); // MYTHICS is the token symbol with precision 4
+     asset faucet_asset(faucet_amount, sym);    // allow set amount of tokens to be recieved
+
+     sub_balance(_self, faucet_asset);
+     add_balance(owner, faucet_asset, owner);
+
+    //update the last_recieved to current time
+    faucets_table.modify( it, same_payer, [&]( auto& a ) {
+        a.last_recieved = now();
+    });
+  }
+
 
 void token::open( const name& owner, const symbol& symbol, const name& ram_payer )
 {

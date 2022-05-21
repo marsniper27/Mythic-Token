@@ -2,6 +2,11 @@
 
 #include <eosio/asset.hpp>
 #include <eosio/eosio.hpp>
+#include <eosio/system.hpp>
+
+uint32_t now() {
+    return (uint32_t)(eosio::current_time_point().sec_since_epoch());
+}
 
 #include <string>
 
@@ -22,7 +27,7 @@ namespace eosio {
     * 
     * Similarly, the `stats` multi-index table, holds instances of `currency_stats` objects for each row, which contains information about current supply, maximum supply, and the creator account for a symbol token. The `stats` table is scoped to the token symbol.  Therefore, when one queries the `stats` table for a token symbol the result is one single entry/row corresponding to the queried symbol token if it was previously created, or nothing, otherwise.
     */
-   class [[eosio::contract("eosio.token")]] token : public contract {
+   class [[eosio::contract("mythics")]] token : public contract {
       public:
          using contract::contract;
 
@@ -100,6 +105,21 @@ namespace eosio {
           */
          [[eosio::action]]
          void close( const name& owner, const symbol& symbol );
+         
+         [[eosio::action]]
+         void faucet(const name &owner);
+
+         
+         [[eosio::action]]
+         void enable_faucet(const bool state);
+         [[eosio::action]]
+         void faucet_time(const uint32_t hours);
+         [[eosio::action]]
+         void faucet_amount(const uint32_t amount);
+         [[eosio::action]]
+         void enable_tax(const bool state);
+         [[eosio::action]]
+         void tax_rate(const uint32_t rate);
 
          static asset get_supply( const name& token_contract_account, const symbol_code& sym_code )
          {
@@ -121,7 +141,14 @@ namespace eosio {
          using transfer_action = eosio::action_wrapper<"transfer"_n, &token::transfer>;
          using open_action = eosio::action_wrapper<"open"_n, &token::open>;
          using close_action = eosio::action_wrapper<"close"_n, &token::close>;
+         using faucet_action = eosio::action_wrapper<"faucet"_n, &token::faucet>;
       private:
+         bool faucet_enabled = 0;
+         uint32_t faucet_amount = 1000;
+         uint32_t faucet_time = 86400;
+         bool tax_enabled = 1;
+         uint32_t tax_rate = 1;
+
          struct [[eosio::table]] account {
             asset    balance;
 
@@ -136,8 +163,17 @@ namespace eosio {
             uint64_t primary_key()const { return supply.symbol.code().raw(); }
          };
 
+         struct [[eosio::table]] faucet_list {
+            name account;
+            uint32_t last_recieved;
+
+            uint64_t primary_key()const { return account.value; }
+         };
+
+
          typedef eosio::multi_index< "accounts"_n, account > accounts;
          typedef eosio::multi_index< "stat"_n, currency_stats > stats;
+         typedef eosio::multi_index< "faucets"_n, faucet_list > faucet;
 
          void sub_balance( const name& owner, const asset& value );
          void add_balance( const name& owner, const asset& value, const name& ram_payer );
