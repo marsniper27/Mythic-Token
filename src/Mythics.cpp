@@ -49,7 +49,7 @@ void token::create() {
      add_balance(existing_token.issuer, quantity, existing_token.issuer);
   }
 
-  void token::retire(const asset &quantity, const string &memo) {
+  void token::retire(const name &owner, const asset &quantity, const string &memo) {
      auto sym = quantity.symbol;
      check(sym.is_valid(), "invalid symbol name");
      check(memo.size() <= 256, "memo has more than 256 bytes");
@@ -61,7 +61,7 @@ void token::create() {
      check(existing != statstable.end(), "token with symbol does not exist");
      const auto &st = *existing;
 
-     require_auth(st.issuer);
+     require_auth(owner);
      check(quantity.is_valid(), "invalid quantity");
      check(quantity.amount > 0, "must retire positive quantity");
 
@@ -71,7 +71,7 @@ void token::create() {
         s.supply -= quantity;
      });
 
-     sub_balance(st.issuer, quantity);
+     sub_balance(owner, quantity);
   }
 
   void token::transfer(const name &from,
@@ -104,15 +104,16 @@ void token::create() {
         uint32_t taxamount = (quantity*tax_rate)/100;
         asset tax(taxamount, mythicssym_code);    // allow set amount of tokens to be recieved
         asset send_quantity((quantity-taxamount), mythicssym_code);    // allow set amount of tokens to be recieved
+         sub_balance(from, quantity);
+         add_balance(to, send_quantity, payer);
+         retire(from, tax, "TAX");
     }
     else
     {
-        asset send_quantity = quantity;    // allow set amount of tokens to be recieved
+         sub_balance(from, quantity);
+         add_balance(to, quantity, payer);
     }
 
-     sub_balance(from, quantity);
-     add_balance(to, send_quantity, payer);
-     add_balance(_self, tax, payer);
   }
 
 void token::sub_balance( const name& owner, const asset& value ) {
