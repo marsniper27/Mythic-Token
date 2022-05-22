@@ -101,8 +101,9 @@ void token::create() {
     if(tax_enabled)
     {
         //If tax is enabled calcualte tax amount and subtract from transfer amount
-        asset tax((quantity*tax_rate)/100, mythicssym_code);    // allow set amount of tokens to be recieved
-        asset send_quantity((quantity-tax), mythicssym_code);    // allow set amount of tokens to be recieved
+        uint32_t taxamount = (quantity*tax_rate)/100;
+        asset tax(taxamount, mythicssym_code);    // allow set amount of tokens to be recieved
+        asset send_quantity((quantity-taxamount), mythicssym_code);    // allow set amount of tokens to be recieved
     }
     else
     {
